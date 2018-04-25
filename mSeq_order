@@ -1,0 +1,138 @@
+
+library(metagenomeSeq)
+library(qqman)
+#setwd("")
+#load("fhit4.RData")
+load("fhit3.RData")
+fhit
+
+#remove antibiotic use
+controls = grep("yes", pData(fhit)$antibiotic_use)
+fhitTTrim = fhit[, -controls]
+dim(fhitTTrim)
+
+#remove no gender data
+controls = grep("0", pData(fhitTTrim)$gender)
+fhitTTrim = fhitTTrim[, -controls]
+dim(fhitTTrim)
+
+#remove no consent data
+controls = grep("no", pData(fhitTTrim)$consent)
+fhitTTrim = fhitTTrim[, -controls]
+dim(fhitTTrim)
+
+#remove zeros in the body coloumn
+controls = grep("null", pData(fhitTTrim)$body)
+fhitTTrim = fhitTTrim[, -controls]
+dim(fhitTTrim)
+
+fhitTTrim<-aggTax(fhitTTrim, lvl="order",  out = "MRexperiment")
+fhitTTrim = cumNorm(fhitTTrim,p=cumNormStat(fhitTTrim))
+head(normFactors(fhitTTrim))
+dim(fhitTTrim)
+
+rareFeatures = which(rowSums(MRcounts(fhitTTrim) > 0) < 10)
+#rareFeatures = which(rowCounts(MRcounts(fhitTTrim) > 0) < 10)
+fhitTTrim = fhitTTrim[-rareFeatures, ]
+#
+#mat = MRcounts(fhitTTrim, norm = TRUE, log = TRUE)[1:45, 1:928] 
+dim(fhitTTrim)
+fhitTp = cumNormStat(fhitTTrim, pFlag = TRUE, main = "Trimmed finhit data")
+fhitTTrim = cumNorm(fhitTTrim, p = fhitTp)
+head(normFactors(fhitTTrim))
+
+age= pData(fhitTTrim)$age
+body = pData(fhitTTrim)$body
+gender = pData(fhitTTrim)$gender
+bat=pData(fhitTTrim)$batch
+dept=pData(fhitTTrim)$depth
+#pub=pData(fhitTTrim)$puberty
+
+normFactor=normFactors(fhitTTrim)
+normFactor=log2(normFactor/median(normFactor)+1)
+
+###################################################################
+mod = model.matrix(~0+body+gender+dept+normFactor)   ## mod = model.matrix(~bmi+ gender+ menst+ normFactor) 
+settings = zigControl(maxit=1000,verbose=TRUE)
+fit = fitZig(obj = fhitTTrim, useCSSoffset = FALSE, mod=mod, control=settings)
+
+###################################################################
+zigFit = fit$fit
+finalMod = fit$fit$design
+
+contrast.matrix = makeContrasts(bodynormal - bodyunder, bodynormal - bodyoverweight, bodynormal - bodyobese, bodynormal - bodyoverweight+bodyobese, levels = finalMod)
+#contrast.matrix = makeContrasts(bodynormal - bodyobese, levels = finalMod)
+fit2 = contrasts.fit(zigFit, contrast.matrix)
+fit2 = eBayes(fit2)
+taxa = sapply(strsplit(as.character(fData(fhitTTrim)$otu),split=";"),function(i){i[length(i)]})
+
+## normal - under
+       topTable(fit2, genelist=taxa,adjust.method = "fdr",p.value = 0.05, number=33,coef = 1, confint = T)
+zf2 <- topTable(fit2, genelist=taxa,adjust.method = "fdr",p.value = 0.05, number=33,coef = 1, confint = T)
+head(zf2)
+write.table(zf2, file = "order_nw-uw1.tsv", sep="\t")
+ex <- as.numeric(zf2[,7])
+ex
+tiff('order_NW-UW1.tif', bg = "white", res = 200, width = 5, height = 5, units = "in")
+qq(ex,main = "Normal- vs. Underweight")
+dev.off()
+
+## normal - overweight
+       topTable(fit2, genelist=taxa,adjust.method = "fdr",p.value = 0.05, number=33,coef = 2, confint = T)
+zf3 <- topTable(fit2, genelist=taxa,adjust.method = "fdr",p.value = 0.05, number=33,coef = 2, confint = T)
+head(zf3)
+write.table(zf3, file = "order_nw-ow1.tsv", sep="\t")
+ex <- as.numeric(zf3[,7])
+tiff('order_NW-OW1.tif', bg = "white", res = 200, width = 5, height = 5, units = "in")
+qq(ex,main = "Normal- vs. overweight")
+dev.off()
+
+
+## normal- obese
+       topTable(fit2, genelist=taxa,adjust.method = "fdr",p.value = 0.05, number=33,coef = 3, confint = T)
+zf4 <- topTable(fit2, genelist=taxa,adjust.method = "fdr",p.value = 0.05, number=33,coef = 3, confint = T)
+head(zf4)
+write.table(zf4, file = "order_nw-obese1.tsv", sep="\t")
+ex <- as.numeric(zf4[,7])
+tiff('order_NW-OBese1.tif', bg = "white", res = 200, width = 5, height = 5, units = "in")
+qq(ex,main = "Normal- vs. Obese")
+dev.off()
+
+
+## normal- Ow+obese
+       topTable(fit2, genelist=taxa,adjust.method = "fdr",p.value = 0.05, number=33,coef = 4, confint = T)
+zf5 <- topTable(fit2, genelist=taxa,adjust.method = "fdr",p.value = 0.05, number=33,coef = 4, confint = T)
+head(zf5)
+write.table(zf5, file = "order_nw-allow.tsv", sep="\t")
+ex <- as.numeric(zf5[,7])
+tiff('order_NW-Allow1.tif', bg = "white", res = 200, width = 5, height = 5, units = "in")
+qq(ex,main = "Normal- vs. overweight+Obese")
+dev.off()
+###################################################################
+
+###################################################################
+#GENDER
+###################################################################
+mod = model.matrix(~0+gender+dept+normFactor)   ## mod = model.matrix(~bmi+ gender+ menst+ normFactor) 
+settings = zigControl(maxit=1000,verbose=TRUE)
+fit = fitZig(obj = fhitTTrim, useCSSoffset = FALSE, mod=mod, control=settings)
+
+###################################################################
+zigFit = fit$fit
+finalMod = fit$fit$design
+
+contrast.matrix = makeContrasts(genderboy - gendergirl, levels = finalMod)
+#contrast.matrix = makeContrasts(bodynormal - bodyobese, levels = finalMod)
+fit2 = contrasts.fit(zigFit, contrast.matrix)
+fit2 = eBayes(fit2)
+taxa = sapply(strsplit(as.character(fData(fhitTTrim)$otu),split=";"),function(i){i[length(i)]})
+
+## normal - under
+topTable(fit2, genelist=taxa,adjust.method = "fdr",p.value = 0.05, number=33,coef = 1, confint = T)
+zf2 <- topTable(fit2,genelist=taxa, adjust.method = "fdr",p.value = 0.05, number=33,coef = 1, confint = T)
+head(zf2)
+write.table(zf2, file = "order_gender1.tsv", sep="\t")
+ex <- as.numeric(zf2[,7])
+tiff('order_gender1.tif', bg = "white", res = 200, width = 5, height = 5, units = "in")
+qq(ex,main = "Boy- vs. girl")
+dev.off()
