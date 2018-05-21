@@ -2,7 +2,6 @@
 library(metagenomeSeq)
 library(qqman)
 #setwd("")
-#load("fhit4.RData")
 load("fhit3.RData")
 fhit
 
